@@ -116,30 +116,35 @@ class ElenchosAgent:
         
         # Native direct REST call for Google Gemini
         if self.provider == "gemini":
-            try:
-                import requests
-                model_name = self.model if self.model and "2.0" not in self.model else "gemini-3.1-flash-lite"
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={self.api_key}"
-                payload = {
-                    "contents": [
-                        {
-                            "role": "user",
-                            "parts": [{"text": f"SYSTEM INSTRUCTION: {system_prompt}\n\nUSER PROMPT: {user_prompt}"}]
-                        }
-                    ],
-                    "generationConfig": {"temperature": 0.2}
-                }
-                resp = requests.post(url, json=payload, timeout=30)
-                if resp.status_code == 200:
-                    data = resp.json()
-                    candidates = data.get("candidates", [])
-                    if candidates:
-                        parts = candidates[0].get("content", {}).get("parts", [])
-                        if parts:
-                            return parts[0].get("text", "").strip()
-                print(f"[!] Gemini REST error {resp.status_code}: {resp.text[:100]}")
-            except Exception as e:
-                print(f"[!] Gemini REST exception: {e}")
+            import requests
+            model_name = self.model if self.model and "2.0" not in self.model else "gemini-3.1-flash-lite"
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={self.api_key}"
+            payload = {
+                "contents": [
+                    {
+                        "role": "user",
+                        "parts": [{"text": f"SYSTEM INSTRUCTION: {system_prompt}\n\nUSER PROMPT: {user_prompt}"}]
+                    }
+                ],
+                "generationConfig": {"temperature": 0.2}
+            }
+            for attempt in range(4):
+                try:
+                    resp = requests.post(url, json=payload, timeout=35)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        candidates = data.get("candidates", [])
+                        if candidates:
+                            parts = candidates[0].get("content", {}).get("parts", [])
+                            if parts:
+                                return parts[0].get("text", "").strip()
+                    elif resp.status_code in [429, 503]:
+                        time.sleep(3.0 * (attempt + 1))
+                        continue
+                    print(f"[!] Gemini REST error {resp.status_code}: {resp.text[:100]}")
+                except Exception as e:
+                    print(f"[!] Gemini REST exception: {e}")
+                    time.sleep(2.0)
             return self._mock_llm_response(role, system_prompt, user_prompt)
 
         try:
@@ -306,9 +311,13 @@ class ElenchosAgent:
             audit_raw = self._call_llm("auditor", auditor_system, f"Code to audit:\n\n{current_code}")
             
             try:
-                # Clean JSON if wrapped in markdown blocks
-                clean_json = audit_raw.replace("```json", "").replace("```", "").strip()
-                audit_data = json.loads(clean_json)
+                import re
+                match = re.search(r'\{.*\}', audit_raw, re.DOTALL)
+                if match:
+                    audit_data = json.loads(match.group(0))
+                else:
+                    clean_json = audit_raw.replace("```json", "").replace("```", "").strip()
+                    audit_data = json.loads(clean_json)
             except Exception:
                 audit_data = {"passed": False, "flaws": ["Unparsed critique response."], "required_fix": audit_raw}
 
