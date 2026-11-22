@@ -228,7 +228,7 @@ def run_swebench_eval(
         f.write(f"name: \"{agent_display_name}\"\n")
         f.write(f"backend_model: \"{full_model_name}\"\n")
         f.write("oss: false\n")
-        f.write("site: \"https://github.com/elenchos-ai\"\n")
+        f.write("site: \"https://uzair-03.github.io/alenchos/\"\n")
         f.write(f"submission_date: \"{time.strftime('%Y-%m-%d')}\"\n")
         f.write("description: \"Proprietary Socratic Adversarial Quality Engine for LLMs\"\n")
     print(f"[✓] Generated metadata file: {metadata_file} (oss: false)")
