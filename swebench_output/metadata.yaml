@@ -1,0 +1,6 @@
+name: "Alenchos (gemini/gemini-3.1-flash-lite)"
+backend_model: "gemini/gemini-3.1-flash-lite"
+oss: false
+site: "https://github.com/elenchos-ai"
+submission_date: "2026-11-22"
+description: "Proprietary Socratic Adversarial Quality Engine for LLMs"
