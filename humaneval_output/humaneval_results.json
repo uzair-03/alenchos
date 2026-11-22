@@ -3,9 +3,9 @@
   "model": "gemini/gemini-3.1-flash-lite",
   "benchmark": "HumanEval",
   "date": "2026-11-22",
-  "total": 5,
-  "passed": 3,
-  "pass@1": 60.0,
+  "total": 20,
+  "passed": 14,
+  "pass@1": 70.0,
   "results": [
     {
       "task_id": "HumanEval/0",
@@ -61,6 +61,171 @@
       "test_time": 0.002,
       "error": null,
       "solution": "from typing import List\n\n\ndef mean_absolute_deviation(numbers: List[float]) -> float:\n    \"\"\" For a given list of input numbers, calculate Mean Absolute Deviation\n    around the mean of this dataset.\n    Mean Absolute Deviation is the average absolute difference between each\n    element and a centerpoint (mean in this case):\n    MAD = average | x - x_mean |\n    \"\"\"\n    if not isinstance(numbers, list):\n        raise TypeError(\"Input must be a list of floats.\")\n    \n    if not numbers:\n        raise ValueError(\"Input list cannot be empty.\")\n    \n    try:\n        # Validate contents and calculate mean\n        numeric_data = [float(x) for x in numbers]\n    except (ValueError, TypeError) as e:\n        raise ValueError(\"All elements in the list must be numeric.\") from e\n\n    n = len(numeric_data)\n    mean = sum(numeric_data) / n\n    \n    # Calculate Mean Absolute Deviation\n    mad = sum(abs(x - mean) for x in numeric_data) / n\n    \n    return float(mad)"
+    },
+    {
+      "task_id": "HumanEval/5",
+      "entry_point": "intersperse",
+      "passed": false,
+      "cycles": 2,
+      "flaws_fixed": 3,
+      "gen_time": 11.71,
+      "test_time": 0.003,
+      "error": "AssertionError: Test assertion failed",
+      "solution": "from typing import List, Iterator, Union\n\ndef intersperse(numbers: List[int], delimeter: int) -> Union[List[int], Iterator[int]]:\n    \"\"\" Insert a number 'delimeter' between every two consecutive elements of input list `numbers'.\n    \n    Uses a generator to provide lazy evaluation, ensuring O(1) auxiliary space complexity \n    to prevent memory exhaustion (DoS) attacks.\n    \n    Args:\n        numbers: A list of integers to be interspersed.\n        delimeter: The integer to insert between elements.\n        \n    Returns:\n        An iterator yielding the interspersed integers.\n        \n    Raises:\n        TypeError: If inputs are not of the expected types or list contains non-integers.\n    \"\"\"\n    if not isinstance(numbers, list):\n        raise TypeError(f\"Expected list, got {type(numbers).__name__}\")\n    \n    if not isinstance(delimeter, int):\n        raise TypeError(f\"Delimeter must be an integer, got {type(delimeter).__name__}\")\n\n    # Enforce type safety for list contents\n    for x in numbers:\n        if not isinstance(x, int):\n            raise TypeError(\"All elements in numbers must be integers\")\n\n    def generator() -> Iterator[int]:\n        it = iter(numbers)\n        try:\n            first = next(it)\n        except StopIteration:\n            return\n        \n        yield first\n        for item in it:\n            yield delimeter\n            yield item\n\n    return generator()"
+    },
+    {
+      "task_id": "HumanEval/6",
+      "entry_point": "parse_nested_parens",
+      "passed": true,
+      "cycles": 2,
+      "flaws_fixed": 4,
+      "gen_time": 46.8,
+      "test_time": 0.003,
+      "error": null,
+      "solution": "from typing import List, Iterator\n\ndef parse_nested_parens(paren_string: str, max_length: int = 10000) -> List[int]:\n    \"\"\"\n    Parses a string of space-separated parenthesis groups and returns the \n    maximum nesting depth for each group.\n    \n    Security/Robustness:\n    - Enforces strict maximum input length to prevent DoS.\n    - Validates input type.\n    - Ensures parentheses are balanced.\n    - Uses iterative processing to maintain memory efficiency.\n    \"\"\"\n    if not isinstance(paren_string, str):\n        raise TypeError(\"Input must be a string.\")\n    \n    if len(paren_string) > max_length:\n        raise ValueError(f\"Input exceeds maximum allowed length of {max_length} characters.\")\n\n    def get_groups(s: str) -> Iterator[str]:\n        \"\"\"Generator to yield groups without creating a massive list in memory.\"\"\"\n        start = 0\n        n = len(s)\n        while start < n:\n            # Skip whitespace\n            while start < n and s[start].isspace():\n                start += 1\n            if start == n:\n                break\n            # Find end of group\n            end = start\n            while end < n and not s[end].isspace():\n                end += 1\n            yield s[start:end]\n            start = end\n\n    results: List[int] = []\n    \n    for group in get_groups(paren_string):\n        max_depth = 0\n        current_depth = 0\n        \n        for char in group:\n            if char == '(':\n                current_depth += 1\n                if current_depth > max_depth:\n                    max_depth = current_depth\n            elif char == ')':\n                current_depth -= 1\n                if current_depth < 0:\n                    raise ValueError(f\"Malformed input: Unbalanced parentheses in group '{group}'\")\n            else:\n                raise ValueError(f\"Invalid character '{char}' detected in input.\")\n        \n        if current_depth != 0:\n            raise ValueError(f\"Malformed input: Unbalanced parentheses in group '{group}'\")\n            \n        results.append(max_depth)\n        \n    return results"
+    },
+    {
+      "task_id": "HumanEval/7",
+      "entry_point": "filter_by_substring",
+      "passed": false,
+      "cycles": 2,
+      "flaws_fixed": 4,
+      "gen_time": 73.85,
+      "test_time": 0.007,
+      "error": "AssertionError: Test assertion failed",
+      "solution": "from typing import Iterable, Iterator, Union, Optional\nimport time\n\ndef filter_by_substring(\n    strings: Union[list[str], Iterable[str]], \n    substring: str, \n    max_str_len: int = 10_000_000, \n    max_elements: Optional[int] = None,\n    timeout_seconds: Optional[float] = None\n) -> Iterator[str]:\n    \"\"\" Filter an input iterable of strings for ones that contain the given substring.\n    \n    Security mitigations:\n    - Enforces max_str_len to prevent memory/CPU exhaustion from massive strings.\n    - Enforces max_elements to prevent infinite or excessively large iterables.\n    - Enforces timeout_seconds to prevent blocking the event loop/thread.\n    \"\"\"\n    if not isinstance(substring, str):\n        raise TypeError(f\"Expected 'substring' to be a string, got {type(substring).__name__}\")\n\n    start_time = time.monotonic()\n    processed_count = 0\n\n    for s in strings:\n        # Check element limit\n        if max_elements is not None and processed_count >= max_elements:\n            break\n            \n        # Check timeout\n        if timeout_seconds is not None:\n            if (time.monotonic() - start_time) > timeout_seconds:\n                raise TimeoutError(\"Processing time limit exceeded.\")\n\n        # Validate type and size\n        if not isinstance(s, str):\n            raise TypeError(f\"Expected element of type 'str', got {type(s).__name__}\")\n        \n        if len(s) > max_str_len:\n            raise ValueError(f\"String length {len(s)} exceeds maximum allowed length of {max_str_len}.\")\n\n        # Perform search\n        if substring in s:\n            yield s\n        \n        processed_count += 1"
+    },
+    {
+      "task_id": "HumanEval/8",
+      "entry_point": "sum_product",
+      "passed": true,
+      "cycles": 2,
+      "flaws_fixed": 4,
+      "gen_time": 26.12,
+      "test_time": 0.004,
+      "error": null,
+      "solution": "from typing import List, Tuple\n\ndef sum_product(numbers: List[int]) -> Tuple[int, int]:\n    \"\"\"\n    Calculates the sum and product of a list of integers with robust 64-bit \n    overflow and underflow checking.\n    \n    Args:\n        numbers: A list of integers.\n        \n    Returns:\n        A tuple (sum, product). Returns (0, 1) for an empty list.\n        \n    Raises:\n        TypeError: If the input is not a list or contains non-integer elements.\n        OverflowError: If the product exceeds the 64-bit signed integer range.\n    \"\"\"\n    if not isinstance(numbers, list):\n        raise TypeError(\"Input must be a list of integers.\")\n    \n    MAX_INT_64 = 2**63 - 1\n    MIN_INT_64 = -2**63\n    \n    total_sum = 0\n    total_product = 1\n    \n    for num in numbers:\n        if not isinstance(num, int):\n            raise TypeError(f\"All elements must be integers. Found: {type(num).__name__}\")\n        \n        total_sum += num\n        \n        # Check for overflow/underflow before multiplication\n        if num == 0:\n            total_product = 0\n        elif total_product == 0:\n            total_product = 0\n        else:\n            # Check bounds for product * num\n            # We use division to check bounds to avoid pre-calculating the result\n            if num > 0:\n                if total_product > 0:\n                    if total_product > MAX_INT_64 // num:\n                        raise OverflowError(\"Product exceeds 64-bit integer limit.\")\n                else:  # total_product < 0\n                    if total_product < MIN_INT_64 // num:\n                        raise OverflowError(\"Product exceeds 64-bit integer limit.\")\n            else:  # num < 0\n                if total_product > 0:\n                    if num < MIN_INT_64 // total_product:\n                        raise OverflowError(\"Product exceeds 64-bit integer limit.\")\n                else:  # total_product < 0\n                    # Dividing by negative flips inequality\n                    if total_product < MAX_INT_64 // num:\n                        raise OverflowError(\"Product exceeds 64-bit integer limit.\")\n            \n            total_product *= num\n        \n    return (total_sum, total_product)"
+    },
+    {
+      "task_id": "HumanEval/9",
+      "entry_point": "rolling_max",
+      "passed": true,
+      "cycles": 2,
+      "flaws_fixed": 5,
+      "gen_time": 24.8,
+      "test_time": 0.003,
+      "error": null,
+      "solution": "from typing import List\n\ndef rolling_max(numbers: List[int]) -> List[int]:\n    \"\"\"\n    Generates a list of rolling maximum elements found until the current index.\n    \n    Args:\n        numbers: A list of integers.\n        \n    Returns:\n        A list of integers where each element at index i is the maximum of \n        numbers[0...i]. Returns an empty list if input is empty.\n    \"\"\"\n    if not isinstance(numbers, list):\n        raise TypeError(f\"Expected list, got {type(numbers).__name__}\")\n\n    if not numbers:\n        return []\n\n    # Atomic validation: Ensure all elements are integers and not booleans\n    if not all(isinstance(x, int) and not isinstance(x, bool) for x in numbers):\n        raise TypeError(\"All elements in the list must be integers.\")\n\n    result = []\n    current_max = numbers[0]\n    \n    for num in numbers:\n        if num > current_max:\n            current_max = num\n        result.append(current_max)\n        \n    return result"
+    },
+    {
+      "task_id": "HumanEval/10",
+      "entry_point": "make_palindrome",
+      "passed": false,
+      "cycles": 2,
+      "flaws_fixed": 4,
+      "gen_time": 49.6,
+      "test_time": 0.002,
+      "error": "AssertionError: Test assertion failed",
+      "solution": "def make_palindrome(string: str) -> str:\n    \"\"\"\n    Find the shortest palindrome that begins with a supplied string.\n    \n    To achieve this, we find the longest palindromic prefix of the string.\n    The remaining suffix is reversed and prepended to the original string.\n    This is implemented using the KMP failure function logic in O(n) time.\n    \"\"\"\n    if not isinstance(string, str):\n        raise TypeError(f\"Expected string, got {type(string).__name__}\")\n    \n    if not string:\n        return \"\"\n\n    # To find the longest palindromic prefix, we construct:\n    # string + \"#\" + reverse(string)\n    # The longest prefix of this string that is also a suffix is the \n    # longest palindromic prefix of the original string.\n    rev_s = string[::-1]\n    concat = string + \"#\" + rev_s\n    \n    # KMP failure function (pi table) calculation\n    n = len(concat)\n    pi = [0] * n\n    for i in range(1, n):\n        j = pi[i - 1]\n        while j > 0 and concat[i] != concat[j]:\n            j = pi[j - 1]\n        if concat[i] == concat[j]:\n            j += 1\n        pi[i] = j\n    \n    # The length of the longest palindromic prefix is pi[-1]\n    longest_palindromic_prefix_len = pi[-1]\n    \n    # The part that needs to be mirrored is the suffix that comes after \n    # the longest palindromic prefix. We reverse this suffix and prepend it.\n    suffix_to_reverse = string[longest_palindromic_prefix_len:]\n    return suffix_to_reverse[::-1] + string"
+    },
+    {
+      "task_id": "HumanEval/11",
+      "entry_point": "string_xor",
+      "passed": true,
+      "cycles": 2,
+      "flaws_fixed": 6,
+      "gen_time": 39.93,
+      "test_time": 0.002,
+      "error": null,
+      "solution": "def string_xor(a: str, b: str) -> str:\n    \"\"\"\n    Performs a bitwise XOR operation on two binary strings.\n    \n    Args:\n        a: A string consisting only of '0' and '1'.\n        b: A string consisting only of '0' and '1'.\n        \n    Returns:\n        A string representing the XOR result.\n        \n    Raises:\n        ValueError: If inputs contain characters other than '0' or '1' \n                    or if lengths are mismatched.\n        TypeError: If inputs are not strings.\n    \"\"\"\n    if not isinstance(a, str) or not isinstance(b, str):\n        raise TypeError(\"Inputs must be strings.\")\n\n    if len(a) != len(b):\n        raise ValueError(\"Input strings must have the same length.\")\n\n    # Handle empty string case explicitly\n    if not a:\n        return \"\"\n\n    # Validate characters and compute XOR character-by-character\n    # to avoid arbitrary-precision integer memory exhaustion.\n    result = []\n    for char_a, char_b in zip(a, b):\n        if char_a not in ('0', '1') or char_b not in ('0', '1'):\n            raise ValueError(\"Inputs must consist only of '0' and '1'.\")\n        \n        # XOR logic: '1' if characters are different, '0' if same\n        if char_a != char_b:\n            result.append('1')\n        else:\n            result.append('0')\n            \n    return \"\".join(result)"
+    },
+    {
+      "task_id": "HumanEval/12",
+      "entry_point": "longest",
+      "passed": true,
+      "cycles": 2,
+      "flaws_fixed": 3,
+      "gen_time": 49.53,
+      "test_time": 0.016,
+      "error": null,
+      "solution": "from typing import List, Optional, Iterable\n\ndef longest(strings: List[str]) -> Optional[str]:\n    \"\"\"\n    Returns the longest string from the provided list.\n    In case of ties in length, the first occurrence is returned.\n    Returns None if the input list is empty.\n    \n    Security constraints:\n    - Limits input list size to 1,000,000 elements to prevent memory exhaustion.\n    - Limits individual string length to 10MB (10,485,760 bytes) to prevent DoS.\n    \"\"\"\n    MAX_LIST_SIZE = 1_000_000\n    MAX_STRING_LENGTH = 10_485_760\n\n    if not isinstance(strings, list):\n        raise TypeError(\"Input must be a list.\")\n\n    if len(strings) > MAX_LIST_SIZE:\n        raise ValueError(f\"Input list exceeds maximum allowed size of {MAX_LIST_SIZE}.\")\n\n    if not strings:\n        return None\n\n    longest_str: Optional[str] = None\n    max_len = -1\n\n    for item in strings:\n        if not isinstance(item, str):\n            raise TypeError(f\"All elements must be strings. Found: {type(item).__name__}\")\n        \n        item_len = len(item)\n        if item_len > MAX_STRING_LENGTH:\n            raise ValueError(\"Individual string length exceeds security limit.\")\n        \n        # Using strict inequality ensures we keep the first occurrence in case of ties\n        if item_len > max_len:\n            max_len = item_len\n            longest_str = item\n\n    return longest_str"
+    },
+    {
+      "task_id": "HumanEval/13",
+      "entry_point": "greatest_common_divisor",
+      "passed": true,
+      "cycles": 1,
+      "flaws_fixed": 0,
+      "gen_time": 5.29,
+      "test_time": 0.002,
+      "error": null,
+      "solution": "def greatest_common_divisor(a: int, b: int) -> int:\n    \"\"\" Return a greatest common divisor of two integers a and b\n    >>> greatest_common_divisor(3, 5)\n    1\n    >>> greatest_common_divisor(25, 15)\n    5\n    \"\"\"\n    if not isinstance(a, int) or not isinstance(b, int):\n        raise TypeError(\"Inputs must be integers.\")\n\n    # The GCD of any number and 0 is the absolute value of the non-zero number.\n    # GCD is defined as non-negative by convention.\n    a, b = abs(a), abs(b)\n\n    # Euclidean algorithm\n    while b:\n        a, b = b, a % b\n    \n    return a"
+    },
+    {
+      "task_id": "HumanEval/14",
+      "entry_point": "all_prefixes",
+      "passed": false,
+      "cycles": 2,
+      "flaws_fixed": 3,
+      "gen_time": 16.49,
+      "test_time": 0.002,
+      "error": "AssertionError: Test assertion failed",
+      "solution": "from typing import Iterator\n\ndef all_prefixes(string: str) -> Iterator[str]:\n    \"\"\"\n    Yield all prefixes of the input string from shortest to longest.\n    \n    Args:\n        string: The input string to generate prefixes from.\n        \n    Yields:\n        A string representing each prefix, starting from the first character.\n        \n    Raises:\n        TypeError: If the input is not a string.\n    \"\"\"\n    if not isinstance(string, str):\n        raise TypeError(f\"Expected string input, got {type(string).__name__}\")\n        \n    for i in range(1, len(string) + 1):\n        yield string[:i]"
+    },
+    {
+      "task_id": "HumanEval/15",
+      "entry_point": "string_sequence",
+      "passed": true,
+      "cycles": 2,
+      "flaws_fixed": 3,
+      "gen_time": 51.61,
+      "test_time": 0.005,
+      "error": null,
+      "solution": "import threading\nfrom typing import Iterator\n\n# Global semaphore to limit concurrent executions and prevent OOM in high-concurrency environments\n# Adjust the value based on available system memory and expected load\n_CONCURRENCY_LIMIT = threading.Semaphore(10)\nMAX_N = 1_000_000\n\ndef string_sequence(n: int) -> str:\n    \"\"\" \n    Return a string containing space-delimited numbers starting from 0 upto n inclusive.\n    Uses a semaphore to prevent concurrent memory exhaustion and pre-allocates \n    the result to minimize GC overhead.\n    \"\"\"\n    if not isinstance(n, int):\n        raise TypeError(f\"Expected integer, got {type(n).__name__}\")\n    \n    if n < 0:\n        raise ValueError(\"Input must be a non-negative integer.\")\n    \n    if n > MAX_N:\n        raise ValueError(f\"Input n exceeds the maximum allowed limit of {MAX_N}.\")\n\n    with _CONCURRENCY_LIMIT:\n        # Pre-allocating the list is more memory-efficient than a generator \n        # for join() as it allows the interpreter to calculate the total \n        # buffer size required for the final string in one pass.\n        return \" \".join([str(i) for i in range(n + 1)])\n\ndef stream_string_sequence(n: int) -> Iterator[str]:\n    \"\"\"\n    Alternative streaming implementation to avoid holding the entire \n    string in memory for large n.\n    \"\"\"\n    if not isinstance(n, int) or n < 0 or n > MAX_N:\n        raise ValueError(\"Invalid input range.\")\n        \n    for i in range(n + 1):\n        yield str(i)\n        if i < n:\n            yield \" \""
+    },
+    {
+      "task_id": "HumanEval/16",
+      "entry_point": "count_distinct_characters",
+      "passed": true,
+      "cycles": 2,
+      "flaws_fixed": 3,
+      "gen_time": 17.44,
+      "test_time": 0.008,
+      "error": null,
+      "solution": "import unicodedata\n\ndef count_distinct_characters(string: str) -> int:\n    \"\"\"\n    Given a string, find out how many distinct characters (regardless of case) does it consist of.\n    \n    Args:\n        string: The input string to evaluate.\n        \n    Returns:\n        int: The count of unique case-insensitive characters.\n        \n    Raises:\n        TypeError: If the input is not a string.\n    \"\"\"\n    if not isinstance(string, str):\n        raise TypeError(f\"Expected string input, received {type(string).__name__}\")\n    \n    # Use NFKC normalization to handle canonical and compatibility equivalences,\n    # then use casefold() for aggressive, Unicode-compliant case-insensitive matching.\n    normalized_string = unicodedata.normalize('NFKC', string)\n    \n    return len({char.casefold() for char in normalized_string})"
+    },
+    {
+      "task_id": "HumanEval/17",
+      "entry_point": "parse_music",
+      "passed": true,
+      "cycles": 2,
+      "flaws_fixed": 4,
+      "gen_time": 53.65,
+      "test_time": 0.005,
+      "error": null,
+      "solution": "from typing import List, Iterator\n\ndef parse_music(music_string: str) -> List[int]:\n    \"\"\"\n    Parses a string of musical notes and returns a list of their beat durations.\n    Uses a single-pass state machine approach to ensure O(n) time complexity,\n    prevent ReDoS, and maintain memory efficiency.\n    \n    Mapping:\n    'o'  -> 4 beats\n    'o|' -> 2 beats\n    '.|' -> 1 beat\n    \"\"\"\n    if not isinstance(music_string, str):\n        raise TypeError(\"Input must be a string.\")\n\n    mapping = {\n        'o': 4,\n        'o|': 2,\n        '.|': 1\n    }\n\n    def token_generator(data: str) -> Iterator[int]:\n        i = 0\n        n = len(data)\n        while i < n:\n            char = data[i]\n            \n            # Skip whitespace\n            if char.isspace():\n                i += 1\n                continue\n            \n            # Check for two-character tokens first\n            if i + 1 < n:\n                two_char = data[i:i+2]\n                if two_char in mapping:\n                    yield mapping[two_char]\n                    i += 2\n                    continue\n            \n            # Check for single-character tokens\n            if char in mapping:\n                yield mapping[char]\n                i += 1\n                continue\n            \n            # If no match, input is invalid\n            raise ValueError(f\"Input contains invalid musical note symbol at index {i}: '{char}'\")\n\n    return list(token_generator(music_string))"
+    },
+    {
+      "task_id": "HumanEval/18",
+      "entry_point": "how_many_times",
+      "passed": true,
+      "cycles": 2,
+      "flaws_fixed": 4,
+      "gen_time": 10.76,
+      "test_time": 0.002,
+      "error": null,
+      "solution": "def how_many_times(string: str, substring: str) -> int:\n    \"\"\" Find how many times a given substring can be found in the original string. \n    Count overlapping cases.\n    \n    Constraints:\n    - Empty substring returns 0 to align with standard library expectations.\n    - Input strings are limited to 1,000,000 characters to prevent resource exhaustion.\n    \"\"\"\n    MAX_LENGTH = 1_000_000\n    \n    if not isinstance(string, str) or not isinstance(substring, str):\n        raise TypeError(\"Both arguments must be strings.\")\n    \n    if len(string) > MAX_LENGTH or len(substring) > MAX_LENGTH:\n        raise ValueError(\"Input string length exceeds maximum allowed limit.\")\n\n    # Standard library behavior for empty substring in count/find is usually 0 \n    # or an error; returning 0 prevents infinite loops and logical ambiguity.\n    if not substring:\n        return 0\n    \n    # Using a sliding window approach with string slicing or find() is O(N*M).\n    # To mitigate ReDoS/Performance degradation, we ensure we are not performing \n    # backtracking regex. The find() method is implemented in C and is highly \n    # optimized for this specific task.\n    count = 0\n    start = 0\n    while True:\n        start = string.find(substring, start)\n        if start == -1:\n            break\n        count += 1\n        # Increment by 1 to allow overlapping occurrences\n        start += 1\n        \n    return count"
+    },
+    {
+      "task_id": "HumanEval/19",
+      "entry_point": "sort_numbers",
+      "passed": true,
+      "cycles": 2,
+      "flaws_fixed": 5,
+      "gen_time": 10.97,
+      "test_time": 0.01,
+      "error": null,
+      "solution": "from typing import Dict, List\n\ndef sort_numbers(numbers: str) -> str:\n    \"\"\"\n    Sorts a space-delimited string of number words ('zero' through 'nine')\n    from smallest to largest.\n    \"\"\"\n    # Security constraint: Limit input length to prevent memory exhaustion (DoS)\n    MAX_INPUT_LENGTH = 1024\n    MAX_TOKENS = 256\n    \n    if not isinstance(numbers, str):\n        raise TypeError(\"Input must be a string.\")\n    \n    if len(numbers) > MAX_INPUT_LENGTH:\n        raise ValueError(\"Input string exceeds maximum allowed length.\")\n    \n    mapping: Dict[str, int] = {\n        'zero': 0, 'one': 1, 'two': 2, 'three': 3, 'four': 4,\n        'five': 5, 'six': 6, 'seven': 7, 'eight': 8, 'nine': 9\n    }\n    \n    # Sanitize: Normalize whitespace and split into tokens\n    # .split() handles all whitespace characters (tabs, newlines, multiple spaces)\n    tokens: List[str] = numbers.split()\n    \n    if len(tokens) > MAX_TOKENS:\n        raise ValueError(\"Input contains too many tokens.\")\n        \n    if not tokens:\n        return \"\"\n    \n    # Normalize tokens to lowercase for consistent processing\n    normalized_tokens = [t.lower() for t in tokens]\n    \n    # Validate all tokens exist in mapping before sorting\n    for token in normalized_tokens:\n        if token not in mapping:\n            # Generic error message to prevent information disclosure\n            raise ValueError(\"Invalid number word encountered in input.\")\n    \n    # Sort based on the integer value mapped from the word\n    sorted_tokens: List[str] = sorted(normalized_tokens, key=lambda x: mapping[x])\n        \n    return \" \".join(sorted_tokens)"
     }
   ]
 }
