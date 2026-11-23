@@ -219,5 +219,5 @@ if __name__ == "__main__":
     parser.add_argument("--offset", type=int, default=0, help="Starting task index")
     args = parser.parse_args()
 
-    API_KEY = "AIzaSyDXO59HV9JE8hJk5YK-5aRznt9vM5X8vRQ"
+    API_KEY = "os.getenv("GEMINI_API_KEY")"
     run_humaneval_benchmark(api_key=API_KEY, limit=args.limit, offset=args.offset)
