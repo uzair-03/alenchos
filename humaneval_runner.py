@@ -84,19 +84,23 @@ def test_solution(prompt: str, solution: str, test_code: str, entry_point: str) 
         return {"passed": False, "error": f"{type(e).__name__}: {str(e)[:100]}", "duration": duration}
 
 def run_humaneval_benchmark(
-    api_key: str,
+    api_key: Any,
     model: str = "gemini-3.1-flash-lite",
-    limit: int = 25,
+    limit: int = 164,
     offset: int = 0,
+    delay: float = 1.2,
+    reset: bool = False,
     agent_name: str = "Alenchos"
 ):
     print("=" * 80, flush=True)
-    print("ALENCHOS HUMANEVAL OFFICIAL BENCHMARK RUNNER", flush=True)
+    print("ALENCHOS HUMANEVAL OFFICIAL BENCHMARK RUNNER (MULTI-KEY ROTATION)", flush=True)
     print("=" * 80, flush=True)
     print(f"Agent Framework:     {agent_name} Socratic Quality Engine", flush=True)
     print(f"Backend Model:       gemini/{model}", flush=True)
     print(f"Benchmark:           HumanEval (OpenAI / EvalPlus)", flush=True)
     print(f"Target Tasks:        {limit} problems (offset: {offset})", flush=True)
+    key_count = len(api_key) if isinstance(api_key, list) else 1
+    print(f"Active Key Pool:     {key_count} keys in round-robin rotation (Delay: {delay}s)", flush=True)
     print("=" * 80, flush=True)
 
     agent = ElenchosAgent(
@@ -118,14 +122,16 @@ def run_humaneval_benchmark(
 
     results = []
 
-    # Load existing if available
-    if os.path.exists(report_file):
+    # Load existing if available and reset is False
+    if not reset and os.path.exists(report_file):
         try:
             with open(report_file, "r", encoding="utf-8") as f:
                 existing = json.load(f)
                 results = existing.get("results", [])
         except Exception:
             results = []
+    elif reset:
+        print("[*] Starting fresh test run (--reset enabled).", flush=True)
 
     already_done_ids = {r["task_id"] for r in results}
 
@@ -194,9 +200,14 @@ def run_humaneval_benchmark(
                 "results": results
             }, f, indent=2)
 
-        time.sleep(1.0)
+        # Safe rate-limiting delay between tasks to protect free-tier 15 RPM
+        time.sleep(delay)
 
     # Final summary table
+    passed_count = sum(1 for r in results if r["passed"])
+    total_count = len(results)
+    pass_at_1 = round((passed_count / max(total_count, 1)) * 100, 1)
+
     print("\n" + "=" * 80, flush=True)
     print("LIVE HUMANEVAL FINAL SCORE TABLE", flush=True)
     print("=" * 80, flush=True)
@@ -215,9 +226,23 @@ def run_humaneval_benchmark(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run HumanEval benchmark")
-    parser.add_argument("--limit", type=int, default=20, help="Number of tasks to evaluate")
+    parser.add_argument("--limit", type=int, default=164, help="Number of tasks to evaluate")
     parser.add_argument("--offset", type=int, default=0, help="Starting task index")
+    parser.add_argument("--delay", type=float, default=1.2, help="Rate limit delay in seconds")
+    parser.add_argument("--api-key", type=str, default=None, help="Gemini API Key")
+    parser.add_argument("--reset", action="store_true", help="Start fresh evaluation")
     args = parser.parse_args()
 
-    API_KEY = os.getenv("GEMINI_API_KEY")
-    run_humaneval_benchmark(api_key=API_KEY, limit=args.limit, offset=args.offset)
+    keys_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "keys.json")
+    if os.path.exists(keys_file):
+        with open(keys_file, "r") as f:
+            api_keys = json.load(f)
+    elif args.api_key:
+        api_keys = [args.api_key]
+    elif os.getenv("GEMINI_API_KEY"):
+        api_keys = [os.getenv("GEMINI_API_KEY")]
+    else:
+        print("[!] No API keys found. Pass --api-key, set GEMINI_API_KEY, or create keys.json.", flush=True)
+        sys.exit(1)
+
+    run_humaneval_benchmark(api_key=api_keys, limit=args.limit, offset=args.offset, delay=args.delay, reset=args.reset)
