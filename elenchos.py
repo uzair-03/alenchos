@@ -90,7 +90,18 @@ class ElenchosAgent:
         self.model = model or preset.get("default_model") or "llama-3.3-70b-versatile"
         
         env_var = preset.get("env_key")
-        self.api_key = api_key or (os.getenv(env_var) if env_var else None) or os.getenv("OPENAI_API_KEY")
+        if isinstance(api_key, list):
+            self.api_keys = [k for k in api_key if k]
+            self.api_key = self.api_keys[0] if self.api_keys else None
+        elif api_key:
+            self.api_keys = [api_key]
+            self.api_key = api_key
+        else:
+            env_val = os.getenv(env_var) if env_var else os.getenv("OPENAI_API_KEY")
+            self.api_keys = [env_val] if env_val else []
+            self.api_key = env_val
+
+        self.key_index = 0
         
         if not self.api_key and not self.use_mock and self.provider != "ollama":
             # If no API key is set, automatically fallback to mock simulator with warning
@@ -114,11 +125,10 @@ class ElenchosAgent:
         if self.use_mock:
             return self._mock_llm_response(role, system_prompt, user_prompt)
         
-        # Native direct REST call for Google Gemini
+        # Native direct REST call for Google Gemini with Multi-Key Pool Rotation
         if self.provider == "gemini":
             import requests
             model_name = self.model if self.model and "2.0" not in self.model else "gemini-3.1-flash-lite"
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={self.api_key}"
             payload = {
                 "contents": [
                     {
@@ -128,9 +138,13 @@ class ElenchosAgent:
                 ],
                 "generationConfig": {"temperature": 0.2}
             }
-            for attempt in range(4):
+            num_keys = max(len(self.api_keys), 1)
+            for attempt in range(num_keys * 3):
+                active_key = self.api_keys[self.key_index % num_keys]
+                self.key_index += 1
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={active_key}"
                 try:
-                    resp = requests.post(url, json=payload, timeout=35)
+                    resp = requests.post(url, json=payload, timeout=30)
                     if resp.status_code == 200:
                         data = resp.json()
                         candidates = data.get("candidates", [])
@@ -139,12 +153,13 @@ class ElenchosAgent:
                             if parts:
                                 return parts[0].get("text", "").strip()
                     elif resp.status_code in [429, 503]:
-                        time.sleep(3.0 * (attempt + 1))
+                        print(f"[*] Rotated to next key in pool...")
+                        time.sleep(1.0)
                         continue
                     print(f"[!] Gemini REST error {resp.status_code}: {resp.text[:100]}")
                 except Exception as e:
                     print(f"[!] Gemini REST exception: {e}")
-                    time.sleep(2.0)
+                    time.sleep(1.0)
             return self._mock_llm_response(role, system_prompt, user_prompt)
 
         try:
